@@ -1,3 +1,4 @@
+
 /**
  * quadtree-js
  * @version 1.2.2
@@ -5,11 +6,10 @@
  * @author Timo Hausmann
  */
 
- /* https://github.com/timohausmann/quadtree-js.git v1.2.2 */
- 
+/* https://github.com/timohausmann/quadtree-js.git v1.2.2 */
+
 /*
 Copyright © 2012-2020 Timo Hausmann
-
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
 "Software"), to deal in the Software without restriction, including
@@ -17,10 +17,8 @@ without limitation the rights to use, copy, modify, merge, publish,
 distribute, sublicense, and/or sell copies of the Software, and to
 permit persons to whom the Software is furnished to do so, subject to
 the following conditions:
-
 The above copyright notice and this permission notice shall be
 included in all copies or substantial portions of the Software.
-
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -30,150 +28,168 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-;(function() {
-     
-    /**
-     * Quadtree Constructor
-     * @param Object bounds            bounds of the node { x, y, width, height }
-     * @param Integer max_objects      (optional) max objects a node can hold before splitting into 4 subnodes (default: 10)
-     * @param Integer max_levels       (optional) total max levels inside root Quadtree (default: 4) 
-     * @param Integer level            (optional) deepth level, required for subnodes (default: 0)
-     */
-    function Quadtree(bounds, max_objects, max_levels, level) {
-        
-        this.max_objects    = max_objects || 10;
-        this.max_levels     = max_levels || 4;
-        
-        this.level  = level || 0;
+/** 把大佬的东西改成Ts，添加注释，用于学习 */
+
+/**
+ * 四叉树碰撞，原点在左上角
+ */
+class Quadtree {
+    /** 最大可容纳对象数 */
+    private max_objects: number;
+    /** 最大深度 */
+    private max_levels: number;
+    /** 当前节点深度 */
+    private level: number;
+    /** 当前区域的信息 */
+    private bounds: Bound;
+    /** 当前区域存放的对象 */
+    private objects: Bound[];
+    /** 当前区域的子节点 */
+    private nodes: Quadtree[];
+
+
+    public constructor(bounds: Bound, level: number = 0, max_objects: number = 10, max_levels: number = 4) {
+
+        this.max_objects = max_objects;
+        this.max_levels = max_levels;
+
+        this.level = level;
         this.bounds = bounds;
-        
-        this.objects    = [];
-        this.nodes      = [];
-    };
-    
-    
+
+        this.objects = [];
+        this.nodes = [];
+    }
+
+
     /**
      * Split the node into 4 subnodes
+     * 将节点分割为4个子节点
      */
-    Quadtree.prototype.split = function() {
-        
-        var nextLevel   = this.level + 1,
-            subWidth    = this.bounds.width/2,
-            subHeight   = this.bounds.height/2,
-            x           = this.bounds.x,
-            y           = this.bounds.y;        
-     
+    private split() {
+        let nextLevel = this.level + 1,
+            subWidth = this.bounds.width / 2,
+            subHeight = this.bounds.height / 2,
+            x = this.bounds.x,
+            y = this.bounds.y;
+
         //top right node
-        this.nodes[0] = new Quadtree({
-            x       : x + subWidth, 
-            y       : y, 
-            width   : subWidth, 
-            height  : subHeight
+        this.nodes[QuadtreeDir.NE] = new Quadtree({
+            x: x + subWidth,
+            y: y,
+            width: subWidth,
+            height: subHeight
         }, this.max_objects, this.max_levels, nextLevel);
-        
+
         //top left node
-        this.nodes[1] = new Quadtree({
-            x       : x, 
-            y       : y, 
-            width   : subWidth, 
-            height  : subHeight
+        this.nodes[QuadtreeDir.NW] = new Quadtree({
+            x: x,
+            y: y,
+            width: subWidth,
+            height: subHeight
         }, this.max_objects, this.max_levels, nextLevel);
-        
+
         //bottom left node
-        this.nodes[2] = new Quadtree({
-            x       : x, 
-            y       : y + subHeight, 
-            width   : subWidth, 
-            height  : subHeight
+        this.nodes[QuadtreeDir.SW] = new Quadtree({
+            x: x,
+            y: y + subHeight,
+            width: subWidth,
+            height: subHeight
         }, this.max_objects, this.max_levels, nextLevel);
-        
+
         //bottom right node
-        this.nodes[3] = new Quadtree({
-            x       : x + subWidth, 
-            y       : y + subHeight, 
-            width   : subWidth, 
-            height  : subHeight
+        this.nodes[QuadtreeDir.SE] = new Quadtree({
+            x: x + subWidth,
+            y: y + subHeight,
+            width: subWidth,
+            height: subHeight
         }, this.max_objects, this.max_levels, nextLevel);
     };
-    
-    
+
+
     /**
      * Determine which node the object belongs to
-     * @param Object pRect      bounds of the area to be checked, with x, y, width, height
-     * @return Array            an array of indexes of the intersecting subnodes 
-     *                          (0-3 = top-right, top-left, bottom-left, bottom-right / ne, nw, sw, se)
+     * 确定对象属于哪个节点
+     * @param pRect     bounds of the area to be checked, with x, y, width, height 
+     *                  要检查的区域的边界，x, y，宽度，高度
+     * @return Array    an array of indexes of the intersecting subnodes  
+     *                  (0-3 = top-right, top-left, bottom-left, bottom-right / ne, nw, sw, se)
+     *                  相交子节点的索引数组
+     *                  (0-3 =右上，左上，左下，右下 / 东北，西北，西南，东南)
+     * 
      */
-    Quadtree.prototype.getIndex = function(pRect) {
-        
-        var indexes = [],
-            verticalMidpoint    = this.bounds.x + (this.bounds.width/2),
-            horizontalMidpoint  = this.bounds.y + (this.bounds.height/2);    
+    private getIndex(pRect: Bound): number[] {
 
-        var startIsNorth = pRect.y < horizontalMidpoint,
-            startIsWest  = pRect.x < verticalMidpoint,
-            endIsEast    = pRect.x + pRect.width > verticalMidpoint,
-            endIsSouth   = pRect.y + pRect.height > horizontalMidpoint;    
+        let indexes: number[] = [],
+            verticalMidpoint = this.bounds.x + (this.bounds.width / 2),
+            horizontalMidpoint = this.bounds.y + (this.bounds.height / 2);
+
+        let startIsNorth = pRect.y < horizontalMidpoint,
+            startIsWest = pRect.x < verticalMidpoint,
+            endIsEast = pRect.x + pRect.width > verticalMidpoint,
+            endIsSouth = pRect.y + pRect.height > horizontalMidpoint;
 
         //top-right quad
-        if(startIsNorth && endIsEast) {
-            indexes.push(0);
+        if (startIsNorth && endIsEast) {
+            indexes.push(QuadtreeDir.NE);
         }
-        
+
         //top-left quad
-        if(startIsWest && startIsNorth) {
-            indexes.push(1);
+        if (startIsWest && startIsNorth) {
+            indexes.push(QuadtreeDir.NW);
         }
 
         //bottom-left quad
-        if(startIsWest && endIsSouth) {
-            indexes.push(2);
+        if (startIsWest && endIsSouth) {
+            indexes.push(QuadtreeDir.SW);
         }
 
         //bottom-right quad
-        if(endIsEast && endIsSouth) {
-            indexes.push(3);
+        if (endIsEast && endIsSouth) {
+            indexes.push(QuadtreeDir.SE);
         }
-     
+
         return indexes;
-    };
-    
-    
+    }
+
+
     /**
      * Insert the object into the node. If the node
      * exceeds the capacity, it will split and add all
      * objects to their corresponding subnodes.
-     * @param Object pRect        bounds of the object to be added { x, y, width, height }
+     * 将对象插入节点。
+     * 如果节点超出容量，它将分割所有对象并将其添加到相应的子节点。
+     * @param pRect bounds of the object to be added { x, y, width, height }
      */
-    Quadtree.prototype.insert = function(pRect) {
-        
-        var i = 0,
-            indexes;
-         
+    public insert(pRect: Bound) {
+
+        let i = 0,
+            indexes: number[];
+
         //if we have subnodes, call insert on matching subnodes
-        if(this.nodes.length) {
+        if (this.nodes.length) {
             indexes = this.getIndex(pRect);
-     
-            for(i=0; i<indexes.length; i++) {
-                this.nodes[indexes[i]].insert(pRect);     
+
+            for (i = 0; i < indexes.length; i++) {
+                this.nodes[indexes[i]].insert(pRect);
             }
             return;
         }
-     
+
         //otherwise, store object here
         this.objects.push(pRect);
 
         //max_objects reached
-        if(this.objects.length > this.max_objects && this.level < this.max_levels) {
+        if (this.objects.length > this.max_objects && this.level < this.max_levels) {
 
             //split if we don't already have subnodes
-            if(!this.nodes.length) {
+            if (!this.nodes.length) {
                 this.split();
             }
-            
+
             //add all objects to their corresponding subnode
-            for(i=0; i<this.objects.length; i++) {
+            for (i = 0; i < this.objects.length; i++) {
                 indexes = this.getIndex(this.objects[i]);
-                for(var k=0; k<indexes.length; k++) {
+                for (let k = 0; k < indexes.length; k++) {
                     this.nodes[indexes[k]].insert(this.objects[i]);
                 }
             }
@@ -181,56 +197,77 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
             //clean up this node
             this.objects = [];
         }
-     };
-     
-     
+    }
+
+
     /**
      * Return all objects that could collide with the given object
+     * 返回所有可能与给定对象发生冲突的对象
      * @param Object pRect      bounds of the object to be checked { x, y, width, height }
+     *                          要检查的对象的边界{x, y，宽度，高度}
      * @Return Array            array with all detected objects
+     *                          包含所有检测到的对象的数组
      */
-    Quadtree.prototype.retrieve = function(pRect) {
-         
-        var indexes = this.getIndex(pRect),
+    public retrieve(pRect: Bound) {
+
+        let indexes = this.getIndex(pRect),
             returnObjects = this.objects;
-            
+
         //if we have subnodes, retrieve their objects
-        if(this.nodes.length) {
-            for(var i=0; i<indexes.length; i++) {
+        if (this.nodes.length) {
+            for (let i = 0; i < indexes.length; i++) {
                 returnObjects = returnObjects.concat(this.nodes[indexes[i]].retrieve(pRect));
             }
         }
 
         //remove duplicates
-        returnObjects = returnObjects.filter(function(item, index) {
+        returnObjects = returnObjects.filter(function (item: any, index: number) {
             return returnObjects.indexOf(item) >= index;
         });
-     
+
         return returnObjects;
-    };
-    
-    
+    }
+
+
     /**
      * Clear the quadtree
+     * 清空四叉树
      */
-    Quadtree.prototype.clear = function() {
-        
+    public clear() {
+
         this.objects = [];
-     
-        for(var i=0; i < this.nodes.length; i++) {
-            if(this.nodes.length) {
+
+        for (let i = 0; i < this.nodes.length; i++) {
+            if (this.nodes.length) {
                 this.nodes[i].clear();
-              }
+            }
         }
 
         this.nodes = [];
-    };
-
-    //export for commonJS or browser
-    if(typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
-        module.exports = Quadtree;
-    } else {
-        window.Quadtree = Quadtree;    
     }
+}
 
-})();
+
+enum QuadtreeDir {
+    /** top-right 右上 */
+    NE,
+    /** top-left 左上 */
+    NW,
+    /** bottom-left 左下 */
+    SW,
+    /** bottom-right 右下 */
+    SE
+}
+
+class Bound {
+    constructor(x, y, width, height) {
+        this.x = x;
+        this.y = x;
+        this.width = width;
+        this.height = height;
+    }
+    public readonly x: number;
+    public readonly y: number;
+    public readonly width: any;
+    public readonly height: any;
+}
